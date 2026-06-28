@@ -3864,17 +3864,19 @@ function getMissingSupervisorNotes(collection) {
 
 function addMissingSupervisorNotesToCollection() {
   const collection = loadCollection();
-  collection.supervisorNotes = collection.supervisorNotes || [];
 
   const missing = getMissingSupervisorNotes(collection);
 
-  missing.forEach(entry => {
-    collection.supervisorNotes.push({
-      callId: entry.callId,
-      choiceLabel: entry.choiceLabel,
-      note: entry.note
-    });
-  });
+  const missingNotes = missing.map(entry => ({
+    callId: entry.callId,
+    choiceLabel: entry.choiceLabel,
+    note: entry.note
+  }));
+
+  collection.supervisorNotes = mergeSupervisorNotes(
+    collection.supervisorNotes,
+    missingNotes
+  );
 
   saveCollection(collection);
   return missing.length;
@@ -4675,6 +4677,45 @@ function saveCollection(collection) {
   localStorage.setItem(COLLECTION_SAVE_KEY, JSON.stringify(collection));
 }
 
+
+function getSupervisorNoteKey(item) {
+  if (typeof item === "string") {
+    return item;
+  }
+
+  return [
+    item.callId || "UNKNOWN_CALL",
+    item.choiceLabel || "?",
+    item.note || ""
+  ].join("::");
+}
+
+function mergeSupervisorNotes(oldNotes, newNotes) {
+  const merged = [];
+  const seen = new Set();
+
+  (oldNotes || []).forEach(item => {
+    const key = getSupervisorNoteKey(item);
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  });
+
+  (newNotes || []).forEach(item => {
+    const key = getSupervisorNoteKey(item);
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  });
+
+  return merged;
+}
+
+
 function saveRunCollection(endingKey) {
   const collection = loadCollection();
 
@@ -4688,12 +4729,10 @@ function saveRunCollection(endingKey) {
     endingKey
   ]));
 
-  collection.supervisorNotes = Array.from(
-  new Map([
-    ...(collection.supervisorNotes || []),
-    ...(state.supervisorNotes || [])
-  ].map(note => [note.id, note])).values()
-);
+  collection.supervisorNotes = mergeSupervisorNotes(
+    collection.supervisorNotes,
+    state.supervisorNotes
+  );
 
 collection.answeredCalls = Array.from(new Set([
   ...(collection.answeredCalls || []),
